@@ -1,0 +1,6 @@
+{
+  "name": "Simulator Windows 11 - Exercitiul 6 revizuit",
+  "description": "A web application that simulates a Windows 11 interface for scheduling a medical appointment. Users can fill out a form, upload an ID, and receive a confirmation.",
+  "requestFramePermissions": [],
+  "prompt": ""
+}

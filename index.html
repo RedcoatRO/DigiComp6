@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Programare Online la Medic</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap" rel="stylesheet">
+    <script src="https://unpkg.com/jspdf@latest/dist/jspdf.umd.min.js"></script>
+    <style>
+      :root {
+        --background: 210 40% 98%; /* hsl(210 40% 98%) */
+        --foreground: 222.2 47.4% 11.2%; /* hsl(222.2 47.4% 11.2%) */
+        --muted: 210 40% 96.1%;
+        --muted-foreground: 215.4 16.3% 46.9%;
+        --popover: 0 0% 100%;
+        --popover-foreground: 222.2 47.4% 11.2%;
+        --card: 0 0% 100%;
+        --card-foreground: 222.2 47.4% 11.2%;
+        --border: 214.3 31.8% 91.4%;
+        --input: 214.3 31.8% 91.4%;
+        --primary: 222.2 47.4% 11.2%;
+        --primary-foreground: 210 40% 98%;
+        --secondary: 210 40% 96.1%;
+        --secondary-foreground: 222.2 47.4% 11.2%;
+        --accent: 210 40% 96.1%;
+        --accent-foreground: 222.2 47.4% 11.2%;
+        --destructive: 0 100% 50%;
+        --destructive-foreground: 210 40% 98%;
+        --ring: 215 20.2% 65.1%;
+        --radius: 0.5rem;
+      }
+
+      .dark {
+        --background: 224 71% 4%;
+        --foreground: 213 31% 91%;
+        --muted: 223 47% 11%;
+        --muted-foreground: 215.4 16.3% 56.9%;
+        --popover: 224 71% 4%;
+        --popover-foreground: 215 20.2% 65.1%;
+        --card: 224 71% 4%;
+        --card-foreground: 213 31% 91%;
+        --border: 216 34% 17%;
+        --input: 216 34% 17%;
+        --primary: 210 40% 98%;
+        --primary-foreground: 222.2 47.4% 1.2%;
+        --secondary: 222.2 47.4% 11.2%;
+        --secondary-foreground: 210 40% 98%;
+        --accent: 216 34% 17%;
+        --accent-foreground: 210 40% 98%;
+        --destructive: 0 63% 31%;
+        --destructive-foreground: 210 40% 98%;
+        --ring: 216 34% 17%;
+      }
+
+      body {
+        font-family: 'Roboto', 'Segoe UI', sans-serif;
+        background-color: hsl(var(--background));
+        background-size: cover;
+        background-position: center;
+        overflow: hidden;
+        transition: background-color 0.3s ease;
+        position: relative;
+      }
+      body::before {
+        content: '';
+        position: absolute;
+        top: 0; left: 0; right: 0; bottom: 0;
+        background-image: url('https://images.unsplash.com/photo-1542744095-291d1f67b221?q=80&w=1920&auto=format&fit=crop');
+        background-size: cover;
+        background-position: center;
+        z-index: -1;
+        transition: filter 0.3s ease;
+        filter: brightness(0.9) blur(1px);
+      }
+      .dark body::before {
+        filter: brightness(0.6) blur(1px);
+      }
+      /* Custom scrollbar for a more native feel */
+      ::-webkit-scrollbar {
+        width: 8px;
+        height: 8px;
+      }
+      ::-webkit-scrollbar-track {
+        background: #f1f1f1;
+      }
+      .dark ::-webkit-scrollbar-track {
+        background: #2d3748;
+      }
+      ::-webkit-scrollbar-thumb {
+        background: #a8a8a8;
+        border-radius: 4px;
+      }
+      .dark ::-webkit-scrollbar-thumb {
+        background: #718096;
+      }
+      ::-webkit-scrollbar-thumb:hover {
+        background: #888;
+      }
+      .dark ::-webkit-scrollbar-thumb:hover {
+        background: #a0aec0;
+      }
+    </style>
+    <script type="importmap">
+{
+  "imports": {
+    "react": "https://esm.sh/react@^19.1.0",
+    "react-dom/": "https://esm.sh/react-dom@^19.1.0/",
+    "react/": "https://esm.sh/react@^19.1.0/",
+    "date-fns": "https://esm.sh/date-fns@^4.1.0",
+    "date-fns/": "https://esm.sh/date-fns@^4.1.0/",
+    "framer-motion": "https://esm.sh/framer-motion@^12.23.0",
+    "lucide-react": "https://esm.sh/lucide-react@^0.525.0",
+    "@google/genai": "https://esm.sh/@google/genai@^1.8.0",
+    "react-day-picker": "https://esm.sh/react-day-picker@^9.8.0",
+    "react-draggable": "https://esm.sh/react-draggable@^4.5.0"
+  }
+}
+</script>
+<link rel="stylesheet" href="/index.css">
+</head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/index.tsx"></script>
+  </body>
+</html>
