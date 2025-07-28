@@ -1,21 +1,27 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useContext } from 'react';
 import { AnimatePresence } from 'framer-motion';
 import { Theme } from '../types';
 import Desktop from './Desktop';
 import Window from './Window';
-import ChatWindow from './ChatWindow';
 import StartMenu from './StartMenu';
 import Taskbar from './Taskbar';
 import NotificationManager from './NotificationManager';
+import { EvaluationContext } from '../context/EvaluationContext';
+import EvaluationModal from './EvaluationModal';
 
 const App: React.FC = () => {
   const [isWindowOpen, setWindowOpen] = useState(false);
-  const [isChatOpen, setChatOpen] = useState(false);
   const [isStartMenuOpen, setStartMenuOpen] = useState(false);
   const startMenuRef = useRef<HTMLDivElement>(null);
   const startButtonRef = useRef<HTMLButtonElement>(null);
   
   const [theme, setTheme] = useState<Theme>(() => (localStorage.getItem('theme') as Theme | null) || 'system');
+  
+  // Utilizează contextul de evaluare
+  const evaluation = useContext(EvaluationContext);
+  if (!evaluation) throw new Error("EvaluationContext not found");
+  const { isEvaluationVisible, evaluationResult, score, maxScore, showEvaluation, requestHint, resetEvaluation } = evaluation;
+
 
   useEffect(() => {
     const root = window.document.documentElement;
@@ -55,6 +61,11 @@ const App: React.FC = () => {
           setTheme(theme === 'light' ? 'dark' : 'light');
       }
   };
+  
+  // Handler for closing the evaluation modal.
+  const handleCloseEvaluation = () => {
+      resetEvaluation();
+  };
 
   return (
     <div className="h-screen w-screen flex flex-col selection:bg-blue-500/80 selection:text-white">
@@ -64,9 +75,18 @@ const App: React.FC = () => {
         <div className="w-full h-full absolute top-0 left-0 flex items-center justify-center p-4 overflow-hidden pointer-events-none">
           <AnimatePresence>
             {isWindowOpen && <Window key="main-window" title="Centru Medical" onClose={() => setWindowOpen(false)} />}
-            {isChatOpen && <ChatWindow key="chat-window" onClose={() => setChatOpen(false)} />}
           </AnimatePresence>
         </div>
+        
+        {/* Evaluation Modal displayed over everything */}
+        <AnimatePresence>
+          {isEvaluationVisible && evaluationResult && (
+             <EvaluationModal 
+                result={evaluationResult} 
+                onClose={handleCloseEvaluation}
+             />
+          )}
+        </AnimatePresence>
       </main>
       
       <AnimatePresence>
@@ -77,9 +97,13 @@ const App: React.FC = () => {
          <Taskbar 
             ref={startButtonRef} 
             onStartClick={() => setStartMenuOpen(p => !p)} 
-            onChatClick={() => setChatOpen(p => !p)} 
             onToggleTheme={handleToggleTheme}
             currentTheme={theme}
+            score={score}
+            maxScore={maxScore}
+            onShowEvaluation={showEvaluation}
+            onRequestHint={requestHint}
+            isEvaluationComplete={isEvaluationVisible}
          />
       </footer>
 

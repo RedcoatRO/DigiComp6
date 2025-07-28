@@ -1,6 +1,6 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useContext } from 'react';
 import { AlertCircle, CheckCircle2, FolderUp, ShieldCheck } from 'lucide-react';
-import { FormData, FormErrors, FictionalFile } from '../types';
+import { FormData, FormErrors, FictionalFile, ActionType } from '../types';
 import { INITIAL_FORM_DATA, FORM_STORAGE_KEY, SPECIALIZATIONS, DOCTORS, TIME_SLOTS } from '../constants';
 import { isValidCNP } from '../utils/validation';
 import { useAppointments } from '../hooks/useAppointments';
@@ -9,6 +9,7 @@ import CalendarInput from './CalendarInput';
 import TimeSlotPicker from './TimeSlotPicker';
 import ConfirmationModal from './ConfirmationModal';
 import FileExplorer from './FileExplorer';
+import { EvaluationContext } from '../context/EvaluationContext';
 
 const AppointmentForm: React.FC = () => {
   const [formData, setFormData] = useState<FormData>(() => {
@@ -32,6 +33,10 @@ const AppointmentForm: React.FC = () => {
   const [isFileExplorerOpen, setFileExplorerOpen] = useState(false);
   const { addAppointment } = useAppointments();
   const { addNotification } = useNotifications();
+  
+  const evaluation = useContext(EvaluationContext);
+  if (!evaluation) throw new Error("EvaluationContext is not available");
+  const { logAction } = evaluation;
 
   useEffect(() => {
     // Save form data to local storage, but without the file object
@@ -108,8 +113,19 @@ const AppointmentForm: React.FC = () => {
     }
   };
   
+  const handleBlur = (e: React.FocusEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
+      const { name, value } = e.target;
+      logAction(ActionType.FORM_FIELD_BLUR, { field: name });
+      if (name === 'cnp' && value.length > 0 && (!/^\d{13}$/.test(value) || !isValidCNP(value))) {
+          logAction(ActionType.INVALID_CNP_ATTEMPT, { cnp: value });
+      }
+  };
+  
   const handleValueChange = (name: keyof FormData, value: any) => {
       setFormData(prev => ({ ...prev, [name]: value }));
+      if(name === 'appointmentDate') {
+        logAction(ActionType.FORM_FIELD_BLUR, { field: name });
+      }
   };
   
   const handleFileSelect = (file: FictionalFile | null) => {
@@ -118,50 +134,48 @@ const AppointmentForm: React.FC = () => {
 
     // --- Start of Validation Logic ---
     const allowedMimeTypes = ['application/pdf', 'image/jpeg', 'image/png'];
-    if (!allowedMimeTypes.includes(file.type)) {
-      addNotification({ message: 'Format fișier invalid. Acceptat: PDF, JPG, PNG.', type: 'error' });
-      return;
-    }
-
-    if (file.size > 5 * 1024 * 1024) {
-      addNotification({ message: 'Fișierul depășește limita de 5MB.', type: 'error' });
-      return;
-    }
-    
     const validNames = ["trimitere medicala", "istoric medical", "act de identitate"];
-    if (!validNames.includes(file.name)) {
-        addNotification({ message: `Nume fișier invalid. Sunt permise doar fișierele: ${validNames.join(', ')}.`, type: 'error' });
+    const isNameValid = validNames.includes(file.name);
+    const isTypeValid = allowedMimeTypes.includes(file.type);
+    const isSizeValid = file.size <= 5 * 1024 * 1024;
+
+    if (isNameValid && isTypeValid && isSizeValid) {
+        logAction(ActionType.FILE_UPLOAD_VALID, { file: file.name });
+        addNotification({ message: 'Fișier selectat cu succes!', type: 'success' });
+    } else {
+        logAction(ActionType.FILE_UPLOAD_INVALID, { file: file.name, nameValid: isNameValid, typeValid: isTypeValid, sizeValid: isSizeValid });
+        if (!isTypeValid) addNotification({ message: 'Format fișier invalid. Acceptat: PDF, JPG, PNG.', type: 'error' });
+        else if (!isSizeValid) addNotification({ message: 'Fișierul depășește limita de 5MB.', type: 'error' });
+        else if (!isNameValid) addNotification({ message: `Nume fișier invalid. Sunt permise doar fișierele: ${validNames.join(', ')}.`, type: 'error' });
         return;
     }
     // --- End of Validation Logic ---
 
     // Create a mock File object to be compatible with the existing infrastructure
     const mockFile = new File(['mock content'], `${file.name}.${file.extension}`, { type: file.type });
-    // Hack to set the size property on the mock File object
-    Object.defineProperty(mockFile, 'size', {
-        value: file.size,
-        writable: false,
-    });
+    Object.defineProperty(mockFile, 'size', { value: file.size, writable: false });
     
     handleValueChange('identityDocument', mockFile);
-    addNotification({ message: 'Fișier selectat cu succes!', type: 'success' });
   };
 
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (isFormValid) {
+      logAction(ActionType.FORM_SUBMIT_SUCCESS);
       addAppointment(formData);
       setSubmittedData(formData);
       setShowConfirmation(true);
       addNotification({ message: 'Programare trimisă cu succes!', type: 'success' });
-      setFormData(INITIAL_FORM_DATA);
-      localStorage.removeItem(FORM_STORAGE_KEY);
+      // Don't reset form to allow final evaluation
+    } else {
+      logAction(ActionType.FORM_SUBMIT_ATTEMPT_INVALID, { errors });
+      addNotification({ message: 'Vă rugăm corectați erorile din formular.', type: 'error' });
     }
   };
 
   const getBorderClass = (field: keyof FormData) => {
-      if (!formData[field] && !['termsAccepted'].includes(field)) {
+      if (!formData[field] && !['termsAccepted', 'appointmentDate'].includes(field) && typeof formData[field] !== 'boolean') {
           return 'border-gray-300 dark:border-gray-600 focus:border-blue-500 focus:ring-blue-500';
       }
       return errors[field] ? 'border-red-500 focus:border-red-500 focus:ring-red-500' : 'border-green-500 dark:border-green-600 focus:border-green-500 focus:ring-green-500';
@@ -174,15 +188,15 @@ const AppointmentForm: React.FC = () => {
         <form onSubmit={handleSubmit} noValidate className="space-y-6">
             <h2 className="text-lg font-semibold text-gray-700 dark:text-gray-200 border-b pb-2 mb-4">Date Personale</h2>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div><label htmlFor="fullName" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Nume și Prenume</label><input type="text" id="fullName" name="fullName" value={formData.fullName} onChange={handleChange} placeholder="ex: Popescu Ion" className={`w-full p-2.5 border rounded-md shadow-sm transition-all bg-white dark:bg-gray-700 ${getBorderClass('fullName')}`} />{errors.fullName && <p className="mt-1 text-xs text-red-600">{errors.fullName}</p>}</div>
-                <div><label htmlFor="cnp" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Cod Numeric Personal (CNP)</label><input type="text" id="cnp" name="cnp" value={formData.cnp} onChange={handleChange} placeholder="Introduceți 13 cifre" className={`w-full p-2.5 border rounded-md shadow-sm transition-all bg-white dark:bg-gray-700 ${getBorderClass('cnp')}`} />{errors.cnp && <p className="mt-1 text-xs text-red-600">{errors.cnp}</p>}</div>
+                <div><label htmlFor="fullName" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Nume și Prenume</label><input type="text" id="fullName" name="fullName" value={formData.fullName} onChange={handleChange} onBlur={handleBlur} placeholder="ex: Popescu Ion" className={`w-full p-2.5 border rounded-md shadow-sm transition-all bg-white dark:bg-gray-700 ${getBorderClass('fullName')}`} />{errors.fullName && <p className="mt-1 text-xs text-red-600">{errors.fullName}</p>}</div>
+                <div><label htmlFor="cnp" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Cod Numeric Personal (CNP)</label><input type="text" id="cnp" name="cnp" value={formData.cnp} onChange={handleChange} onBlur={handleBlur} placeholder="Introduceți 13 cifre" className={`w-full p-2.5 border rounded-md shadow-sm transition-all bg-white dark:bg-gray-700 ${getBorderClass('cnp')}`} />{errors.cnp && <p className="mt-1 text-xs text-red-600">{errors.cnp}</p>}</div>
             </div>
             <h2 className="text-lg font-semibold text-gray-700 dark:text-gray-200 border-b pb-2 my-4">Detalii Programare</h2>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div><label htmlFor="specialization" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Specializare</label><select id="specialization" name="specialization" value={formData.specialization} onChange={handleChange} className={`w-full p-2.5 border rounded-md shadow-sm transition-all bg-white dark:bg-gray-700 ${getBorderClass('specialization')}`}><option value="">Selectați specializarea</option>{SPECIALIZATIONS.map(spec => <option key={spec} value={spec}>{spec}</option>)}</select>{errors.specialization && <p className="mt-1 text-xs text-red-600">{errors.specialization}</p>}</div>
-                <div><label htmlFor="doctor" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Medic</label><select id="doctor" name="doctor" value={formData.doctor} onChange={handleChange} disabled={!formData.specialization} className={`w-full p-2.5 border rounded-md shadow-sm transition-all bg-white dark:bg-gray-700 disabled:bg-gray-200 dark:disabled:bg-gray-600 ${getBorderClass('doctor')}`}><option value="">Selectați medicul</option>{availableDoctors.map(doc => <option key={doc.id} value={doc.name}>{doc.name}</option>)}</select>{errors.doctor && <p className="mt-1 text-xs text-red-600">{errors.doctor}</p>}</div>
+                <div><label htmlFor="specialization" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Specializare</label><select id="specialization" name="specialization" value={formData.specialization} onChange={handleChange} onBlur={handleBlur} className={`w-full p-2.5 border rounded-md shadow-sm transition-all bg-white dark:bg-gray-700 ${getBorderClass('specialization')}`}><option value="">Selectați specializarea</option>{SPECIALIZATIONS.map(spec => <option key={spec} value={spec}>{spec}</option>)}</select>{errors.specialization && <p className="mt-1 text-xs text-red-600">{errors.specialization}</p>}</div>
+                <div><label htmlFor="doctor" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Medic</label><select id="doctor" name="doctor" value={formData.doctor} onChange={handleChange} onBlur={handleBlur} disabled={!formData.specialization} className={`w-full p-2.5 border rounded-md shadow-sm transition-all bg-white dark:bg-gray-700 disabled:bg-gray-200 dark:disabled:bg-gray-600 ${getBorderClass('doctor')}`}><option value="">Selectați medicul</option>{availableDoctors.map(doc => <option key={doc.id} value={doc.name}>{doc.name}</option>)}</select>{errors.doctor && <p className="mt-1 text-xs text-red-600">{errors.doctor}</p>}</div>
                 <div className="md:col-span-2 grid grid-cols-1 md:grid-cols-2 gap-6"><CalendarInput label="Data Programării" value={formData.appointmentDate} onChange={(date) => handleValueChange('appointmentDate', date)} error={errors.appointmentDate} /><TimeSlotPicker label="Ora Programării" value={formData.appointmentTime} onChange={(time) => handleValueChange('appointmentTime', time)} unavailableSlots={unavailableSlots} error={errors.appointmentTime} /></div>
-                <div className="md:col-span-2"><label htmlFor="symptoms" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Simptome / Motivul vizitei</label><textarea id="symptoms" name="symptoms" value={formData.symptoms} onChange={handleChange} rows={3} placeholder="Descrieți pe scurt motivul programării..." className={`w-full p-2.5 border rounded-md shadow-sm transition-all bg-white dark:bg-gray-700 ${getBorderClass('symptoms')}`}></textarea>{errors.symptoms && <p className="mt-1 text-xs text-red-600">{errors.symptoms}</p>}</div>
+                <div className="md:col-span-2"><label htmlFor="symptoms" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Simptome / Motivul vizitei</label><textarea id="symptoms" name="symptoms" value={formData.symptoms} onChange={handleChange} onBlur={handleBlur} rows={3} placeholder="Descrieți pe scurt motivul programării..." className={`w-full p-2.5 border rounded-md shadow-sm transition-all bg-white dark:bg-gray-700 ${getBorderClass('symptoms')}`}></textarea>{errors.symptoms && <p className="mt-1 text-xs text-red-600">{errors.symptoms}</p>}</div>
             </div>
             <h2 className="text-lg font-semibold text-gray-700 dark:text-gray-200 border-b pb-2 my-4">Documente și Confirmare</h2>
             {/* This is the new File Explorer trigger */}
@@ -196,7 +210,7 @@ const AppointmentForm: React.FC = () => {
              {formData.identityDocument && (<div className={`mt-2 p-2 rounded-md flex items-center justify-between text-sm ${errors.identityDocument ? 'bg-red-100 text-red-800' : 'bg-green-100 text-green-800 dark:bg-green-900/50 dark:text-green-300'}`}><span>{formData.identityDocument.name} ({(formData.identityDocument.size / 1024 / 1024).toFixed(2)} MB)</span>{errors.identityDocument ? <AlertCircle size={18} /> : <CheckCircle2 size={18}/>}</div>)}
             {errors.identityDocument && !formData.identityDocument && <p className="mt-1 text-xs text-red-600">{errors.identityDocument}</p>}
             <div className="flex items-start mt-6"><input id="termsAccepted" name="termsAccepted" type="checkbox" checked={formData.termsAccepted} onChange={handleChange} className="focus:ring-blue-500 h-4 w-4 text-blue-600 border-gray-300 rounded" /><div className="ml-3 text-sm"><label htmlFor="termsAccepted" className="font-medium text-gray-700 dark:text-gray-300">Sunt de acord cu <a href="#" className="text-blue-600 hover:underline dark:text-blue-400">prelucrarea datelor cu caracter personal</a>.</label>{errors.termsAccepted && <p className="text-xs text-red-600">{errors.termsAccepted}</p>}</div></div>
-            <div className="flex items-center justify-between pt-4"><div className="flex items-center space-x-2 text-sm text-green-700 dark:text-green-400"><ShieldCheck size={18} /><span>Conexiune securizată</span></div><button type="submit" disabled={!isFormValid} className="inline-flex items-center justify-center px-6 py-3 border border-transparent text-base font-medium rounded-md shadow-sm text-white bg-green-600 hover:bg-green-700 disabled:bg-gray-400 dark:disabled:bg-gray-500 disabled:cursor-not-allowed focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 transition-colors">Trimite Cererea</button></div>
+            <div className="flex items-center justify-between pt-4"><div className="flex items-center space-x-2 text-sm text-green-700 dark:text-green-400"><ShieldCheck size={18} /><span>Conexiune securizată</span></div><button type="submit" disabled={isFormValid && evaluation.isEvaluationVisible} className="inline-flex items-center justify-center px-6 py-3 border border-transparent text-base font-medium rounded-md shadow-sm text-white bg-green-600 hover:bg-green-700 disabled:bg-gray-400 dark:disabled:bg-gray-500 disabled:cursor-not-allowed focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 transition-colors">Trimite Cererea</button></div>
         </form>
       </div>
       {showConfirmation && submittedData && (<ConfirmationModal formData={submittedData} onClose={() => setShowConfirmation(false)} />)}
